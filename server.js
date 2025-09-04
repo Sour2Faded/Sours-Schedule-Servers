@@ -27,35 +27,41 @@ app.use(express.json());
 // ===== UPLOAD (from web or mod) =====
 app.post("/upload", upload.single("saveFile"), async (req, res) => {
   const { serverName } = req.body;
-  if (!req.file || !serverName) return res.status(400).send("Missing file or server name");
+  if (!req.file || !serverName) {
+    console.error("Upload failed: Missing file or server name");
+    return res.status(400).send("Missing file or server name");
+  }
 
   try {
     const filePath = req.file.path;
-    const fileStream = fs.createReadStream(filePath);
+    const fileBuffer = fs.readFileSync(filePath); // Read as Buffer
     const fileName = `${serverName}.zip`;
 
-    // Upload to Supabase storage
-    const { error } = await supabase.storage
-      .from("saves")
-      .upload(fileName, fileStream, { upsert: true });
+    console.log(`Uploading '${fileName}' to Supabase...`);
 
-    fs.unlinkSync(filePath); // remove temp file
+    const { data, error } = await supabase.storage
+      .from("saves")
+      .upload(fileName, fileBuffer, { upsert: true });
+
+    fs.unlinkSync(filePath); // Remove temp file
 
     if (error) {
       console.error("Supabase upload error:", error.message);
+      console.error("Error details:", JSON.stringify(error, null, 2));
       return res.status(500).send("Failed to upload to Supabase");
     }
+
+    console.log("Supabase upload successful:", data);
 
     // Initialize player count if not exists
     if (!playerCounts[serverName]) playerCounts[serverName] = 0;
 
     res.json({ success: true, message: "Upload successful" });
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Upload failed");
+    console.error("Upload exception:", err);
+    res.status(500).send("Upload failed due to server error");
   }
 });
-
 // ===== UPDATE PLAYER COUNT =====
 app.post("/playercount/:serverName", (req, res) => {
   const { serverName } = req.params;
