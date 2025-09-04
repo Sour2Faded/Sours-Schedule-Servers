@@ -20,10 +20,11 @@ const playerCounts = {}; // { serverName: count }
 const upload = multer({ dest: "temp_uploads/" });
 if (!fs.existsSync("temp_uploads")) fs.mkdirSync("temp_uploads");
 
-// Parse form fields
+// Parse form fields and JSON
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// Upload save via webpage
+// ===== UPLOAD (from web or mod) =====
 app.post("/upload", upload.single("saveFile"), async (req, res) => {
   const { serverName } = req.body;
   if (!req.file || !serverName) return res.status(400).send("Missing file or server name");
@@ -48,15 +49,15 @@ app.post("/upload", upload.single("saveFile"), async (req, res) => {
     // Initialize player count if not exists
     if (!playerCounts[serverName]) playerCounts[serverName] = 0;
 
-    res.redirect("/"); // back to website
+    res.json({ success: true, message: "Upload successful" });
   } catch (err) {
     console.error(err);
     res.status(500).send("Upload failed");
   }
 });
 
-// Update player count via API
-app.post("/playercount/:serverName", express.json(), (req, res) => {
+// ===== UPDATE PLAYER COUNT =====
+app.post("/playercount/:serverName", (req, res) => {
   const { serverName } = req.params;
   const { count } = req.body;
 
@@ -66,10 +67,33 @@ app.post("/playercount/:serverName", express.json(), (req, res) => {
   res.json({ success: true });
 });
 
-// Webpage showing server names + player counts
+// ===== DOWNLOAD (for mod) =====
+app.get("/download/:serverName", async (req, res) => {
+  const serverName = req.params.serverName;
+
+  try {
+    const { data, error } = await supabase.storage
+      .from("saves")
+      .download(`${serverName}.zip`);
+
+    if (error || !data) {
+      console.error("Supabase download error:", error?.message || "File not found");
+      return res.status(404).send("Save not found");
+    }
+
+    res.setHeader("Content-Disposition", `attachment; filename="${serverName}.zip"`);
+    res.setHeader("Content-Type", "application/zip");
+    data.pipe(res);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Download failed");
+  }
+});
+
+// ===== WEBSITE =====
 app.get("/", async (req, res) => {
   try {
-    // List all saves from Supabase
     const { data, error } = await supabase.storage.from("saves").list("");
     if (error) throw error;
 
