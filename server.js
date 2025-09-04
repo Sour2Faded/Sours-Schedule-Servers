@@ -1,101 +1,83 @@
 const express = require("express");
 const multer = require("multer");
-const { createClient } = require("@supabase/supabase-js");
+const fs = require("fs");
 const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === Supabase config ===
-const SUPABASE_URL = "https://dyifvnvtegtuchrkqsqp.supabase.co"; // replace with your URL
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5aWZ2bnZ0ZWd0dWNocmtxc3FwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Njk0ODY0MiwiZXhwIjoyMDcyNTI0NjQyfQ.YYc9iyinArjf1eiH3zD1jiUZ0THCfMPepnPkDKE3xTs"; // replace with your anon or service key
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Multer setup
+const upload = multer({ dest: "uploads/" });
 
-// Multer setup (store temporarily in memory)
-const upload = multer({ storage: multer.memoryStorage() });
+// Directory to store saves
+const saveDir = path.join(__dirname, "saves");
+if (!fs.existsSync(saveDir)) fs.mkdirSync(saveDir);
 
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
 
-// --- Upload via webpage ---
-app.post("/upload", upload.single("file"), async (req, res) => {
+// Upload via webpage form
+app.post("/upload", upload.single("file"), (req, res) => {
   if (!req.file || !req.body.serverName) {
     return res.status(400).send("Missing server name or file.");
   }
 
-  const serverName = req.body.serverName;
-  const fileName = `${serverName}-${Date.now()}${path.extname(req.file.originalname)}`;
+  const targetPath = path.join(saveDir, `${req.body.serverName}.zip`);
+  fs.renameSync(req.file.path, targetPath);
 
-  try {
-    const { error } = await supabase.storage
-      .from("saves") // the bucket name
-      .upload(fileName, req.file.buffer, { contentType: req.file.mimetype });
-
-    if (error) throw error;
-
-    res.redirect("/");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Failed to upload to Supabase Storage.");
-  }
+  res.redirect("/"); // back to homepage after upload
 });
 
-// --- Download ---
-app.get("/download/:serverName", async (req, res) => {
-  const serverName = req.params.serverName;
+// API upload for mod
+app.post("/upload/:serverName", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: "No file" });
 
-  try {
-    const { data, error } = await supabase.storage
-      .from("saves")
-      .list("", { limit: 100, sortBy: { column: "created_at", order: "desc" } });
+  const targetPath = path.join(saveDir, `${req.params.serverName}.zip`);
+  fs.renameSync(req.file.path, targetPath);
 
-    if (error) throw error;
-
-    // Pick the latest file that starts with the serverName
-    const file = data.find(f => f.name.startsWith(serverName));
-    if (!file) return res.status(404).send("File not found");
-
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("saves")
-      .download(file.name);
-
-    if (downloadError) throw downloadError;
-
-    res.setHeader("Content-Disposition", `attachment; filename=${file.name}`);
-    fileData.stream().pipe(res);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Failed to download file.");
-  }
+  res.json({ success: true, message: "File uploaded", path: targetPath });
 });
 
-// --- List uploaded servers ---
-app.get("/", async (req, res) => {
-  try {
-    const { data, error } = await supabase.storage
-      .from("saves")
-      .list("", { limit: 100 });
+// Download by server name
+app.get("/download/:serverName", (req, res) => {
+  const filePath = path.join(saveDir, `${req.params.serverName}.zip`);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: "Not found" });
 
-    if (error) throw error;
+  res.download(filePath);
+});
 
-    const htmlList = data
-      .map(file => `<p><b>${file.name.split("-")[0]}</b></p>`)
-      .join("");
+// Homepage with upload form
+app.get("/", (req, res) => {
+  let html = `
+    <h1>Upload a Schedule Save</h1>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <input type="text" name="serverName" placeholder="Server name" required />
+      <input type="file" name="file" accept=".zip" required />
+      <button type="submit">Upload Save</button>
+    </form>
+    <br>
+    <a href="/list">View Uploaded Servers</a>
+  `;
+  res.send(html);
+});
 
-    res.send(`
-      <h1>Schedule Saves</h1>
-      <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="text" name="serverName" placeholder="Server name" required />
-        <input type="file" name="file" accept=".zip" required />
-        <button type="submit">Upload Save</button>
-      </form>
-      <h2>Uploaded Saves</h2>
-      ${htmlList || "<p>No saves uploaded yet.</p>"}
-    `);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Failed to fetch list.");
-  }
+// List all uploaded servers
+app.get("/list", (req, res) => {
+  const files = fs.readdirSync(saveDir).filter(f => f.endsWith(".zip"));
+
+  let htmlList = files.map(f => {
+    const name = path.basename(f, ".zip");
+    return `<li><b>${name}</b> - <a href="/download/${name}">Download</a></li>`;
+  }).join("");
+
+  res.send(`
+    <h1>Uploaded Servers</h1>
+    <ul>
+      ${htmlList || "<li>No saves uploaded yet.</li>"}
+    </ul>
+    <br>
+    <a href="/">Back to Upload</a>
+  `);
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
