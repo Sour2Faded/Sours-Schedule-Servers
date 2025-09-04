@@ -2,82 +2,111 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Multer setup
-const upload = multer({ dest: "uploads/" });
+// Supabase setup
+const supabaseUrl = "https://dyifvnvtegtuchrkqsqp.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5aWZ2bnZ0ZWd0dWNocmtxc3FwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Njk0ODY0MiwiZXhwIjoyMDcyNTI0NjQyfQ.YYc9iyinArjf1eiH3zD1jiUZ0THCfMPepnPkDKE3xTs"; // use a Service Role key
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Directory to store saves
-const saveDir = path.join(__dirname, "saves");
-if (!fs.existsSync(saveDir)) fs.mkdirSync(saveDir);
+// Multer setup for temporary storage
+const upload = multer({ dest: "tmp/" });
 
-app.use(express.static("public"));
+// Parse form fields
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+// Home page with upload form
+app.get("/", (req, res) => {
+  res.send(`
+    <h2>Upload Save</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <label>Server Name: <input type="text" name="serverName" required></label><br><br>
+      <label>Save File (zip): <input type="file" name="saveFile" required></label><br><br>
+      <button type="submit">Upload</button>
+    </form>
+    <br>
+    <a href="/list">View Uploaded Servers</a>
+  `);
+});
 
 // Upload via webpage form
-app.post("/upload", upload.single("file"), (req, res) => {
+app.post("/upload", upload.single("saveFile"), async (req, res) => {
   if (!req.file || !req.body.serverName) {
     return res.status(400).send("Missing server name or file.");
   }
 
-  const targetPath = path.join(saveDir, `${req.body.serverName}.zip`);
-  fs.renameSync(req.file.path, targetPath);
+  const serverName = req.body.serverName;
+  const filePath = req.file.path;
+  const fileBuffer = fs.readFileSync(filePath);
 
-  res.redirect("/"); // back to homepage after upload
+  // Upload to Supabase
+  const { data, error } = await supabase.storage
+    .from("saves")
+    .upload(`${serverName}.zip`, fileBuffer, { upsert: true });
+
+  // Remove temp file
+  fs.unlinkSync(filePath);
+
+  if (error) {
+    console.error("Supabase upload error:", error);
+    return res.status(500).send("Failed to upload to Supabase.");
+  }
+
+  res.send(`<p>Upload successful! <a href="/list">Go to list</a></p>`);
 });
 
-// API upload for mod
-app.post("/upload/:serverName", upload.single("file"), (req, res) => {
+// API upload
+app.post("/upload/:serverName", upload.single("saveFile"), async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, message: "No file" });
 
-  const targetPath = path.join(saveDir, `${req.params.serverName}.zip`);
-  fs.renameSync(req.file.path, targetPath);
+  const serverName = req.params.serverName;
+  const fileBuffer = fs.readFileSync(req.file.path);
 
-  res.json({ success: true, message: "File uploaded", path: targetPath });
+  const { data, error } = await supabase.storage
+    .from("saves")
+    .upload(`${serverName}.zip`, fileBuffer, { upsert: true });
+
+  fs.unlinkSync(req.file.path);
+
+  if (error) {
+    console.error("Supabase upload error:", error);
+    return res.status(500).json({ success: false, message: "Failed to upload to Supabase" });
+  }
+
+  res.json({ success: true, message: "File uploaded" });
+});
+
+// List all servers
+app.get("/list", async (req, res) => {
+  const { data: files, error } = await supabase.storage.from("saves").list();
+
+  if (error) return res.status(500).send("Failed to list files.");
+
+  const htmlList = files.map(f => `<p><b>${path.basename(f.name, ".zip")}</b></p>`).join("");
+
+  res.send(`
+    <h2>Uploaded Servers</h2>
+    ${htmlList || "<p>No servers uploaded yet.</p>"}
+    <br><a href="/">Back to Upload</a>
+  `);
 });
 
 // Download by server name
-app.get("/download/:serverName", (req, res) => {
-  const filePath = path.join(saveDir, `${req.params.serverName}.zip`);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: "Not found" });
+app.get("/download/:serverName", async (req, res) => {
+  const serverName = req.params.serverName;
 
-  res.download(filePath);
-});
+  const { data, error } = await supabase.storage
+    .from("saves")
+    .download(`${serverName}.zip`);
 
-// Homepage with upload form
-app.get("/", (req, res) => {
-  let html = `
-    <h1>Upload a Schedule Save</h1>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-      <input type="text" name="serverName" placeholder="Server name" required />
-      <input type="file" name="file" accept=".zip" required />
-      <button type="submit">Upload Save</button>
-    </form>
-    <br>
-    <a href="/list">View Uploaded Servers</a>
-  `;
-  res.send(html);
-});
+  if (error) return res.status(404).send("Server not found");
 
-// List all uploaded servers
-app.get("/list", (req, res) => {
-  const files = fs.readdirSync(saveDir).filter(f => f.endsWith(".zip"));
-
-  let htmlList = files.map(f => {
-    const name = path.basename(f, ".zip");
-    return `<li><b>${name}</b> - <a href="/download/${name}">Download</a></li>`;
-  }).join("");
-
-  res.send(`
-    <h1>Uploaded Servers</h1>
-    <ul>
-      ${htmlList || "<li>No saves uploaded yet.</li>"}
-    </ul>
-    <br>
-    <a href="/">Back to Upload</a>
-  `);
+  res.setHeader("Content-Disposition", `attachment; filename=${serverName}.zip`);
+  data.body.pipe(res);
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
