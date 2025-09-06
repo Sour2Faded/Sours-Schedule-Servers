@@ -83,7 +83,9 @@ app.post("/plrcount/:serverName", (req, res) => {
     const { serverName } = req.params;
     const { count } = req.body;
 
-    if (!serverName || !count) return res.status(400).json({ success: false });
+    if (!serverName || typeof count !== "number") {
+        return res.status(400).json({ success: false, message: "Invalid input" });
+    }
 
     playerCounts[serverName] = count;
     res.json({ success: true });
