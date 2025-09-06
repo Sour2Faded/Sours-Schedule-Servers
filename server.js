@@ -142,7 +142,8 @@ app.get("/", async (req, res) => {
       .map(name => `<p><b>${name}</b> - Players: ${playerCounts[name] || 0}</p>`)
       .join("");
 
-   res.send(`
+    // ✅ Make sure the template literal is closed properly here
+    res.send(`
   <html>
   <head>
     <title>Schedule Servers</title>
@@ -212,9 +213,7 @@ app.get("/", async (req, res) => {
       <h1>Schedule Servers</h1>
       <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
         <input type="text" name="serverName" placeholder="Server name" required />
-
         <input type="file" id="saveFile" name="saveFile" accept=".zip" required />
-
         <button type="submit" id="uploadBtn" style="display:none;">Upload Save</button>
       </form>
 
@@ -239,5 +238,10 @@ app.get("/", async (req, res) => {
   </body>
   </html>
 `);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Failed to load servers");
+  }
+});
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
