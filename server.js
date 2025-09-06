@@ -63,7 +63,7 @@ app.post("/upload", upload.single("saveFile"), async (req, res) => {
   }
 });
 // ===== UPDATE PLAYER COUNT =====
-app.post("/playercount/:serverName", (req, res) => {
+app.post("/plrcount/:serverName", (req, res) => {
   const { serverName } = req.params;
   const { count } = req.body;
 
