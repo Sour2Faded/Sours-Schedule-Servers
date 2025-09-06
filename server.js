@@ -143,7 +143,7 @@ app.get("/", async (req, res) => {
       .join("");
 
     res.send(`
-      <h1>Schedule Saves</h1>
+      <h1>Schedule Servers</h1>
       <form action="/upload" method="post" enctype="multipart/form-data">
         <input type="text" name="serverName" placeholder="Server name" required />
         <input type="file" name="saveFile" accept=".zip" required />
