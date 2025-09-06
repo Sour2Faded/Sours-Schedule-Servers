@@ -27,14 +27,9 @@ app.use(express.json());
 // ===== UPLOAD (from web or mod) =====
 app.post("/upload", upload.single("saveFile"), async (req, res) => {
   const { serverName } = req.body;
-
-  // Validate server name: only letters and numbers, no spaces or special chars
-  if (!serverName || !/^[A-Za-z0-9]+$/.test(serverName)) {
-    return res.status(400).send("Server name must only contain letters and numbers (no spaces or special characters).");
-  }
-
-  if (!req.file) {
-    return res.status(400).send("Missing file");
+  if (!req.file || !serverName) {
+    console.error("Upload failed: Missing file or server name");
+    return res.status(400).send("Missing file or server name");
   }
 
   try {
@@ -52,9 +47,13 @@ app.post("/upload", upload.single("saveFile"), async (req, res) => {
 
     if (error) {
       console.error("Supabase upload error:", error.message);
+      console.error("Error details:", JSON.stringify(error, null, 2));
       return res.status(500).send("Failed to upload to Supabase");
     }
 
+    console.log("Supabase upload successful:", data);
+
+    // Initialize player count if not exists
     if (!playerCounts[serverName]) playerCounts[serverName] = 0;
 
     res.json({ success: true, message: "Upload successful" });
