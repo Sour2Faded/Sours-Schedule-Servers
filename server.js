@@ -28,67 +28,73 @@ app.use(express.json());
 app.post("/upload", upload.single("saveFile"), async (req, res) => {
   const { serverName } = req.body;
 
-  // ✅ Validate server name: only letters (A-Z, a-z) and numbers (0-9), no spaces or special characters
   if (!serverName || !/^[A-Za-z0-9]+$/.test(serverName)) {
-    console.error("Upload failed: Invalid server name");
-    return res.status(400).send("Server name must only contain letters and numbers (no spaces or special characters).");
+    return res.status(400).send("Server name must only contain letters and numbers.");
   }
 
-  if (!req.file) {
-    console.error("Upload failed: Missing file");
-    return res.status(400).send("Missing file");
-  }
+  if (!req.file) return res.status(400).send("Missing file");
 
   try {
-    const filePath = req.file.path;
-    const fileBuffer = fs.readFileSync(filePath); // Read as Buffer
-    const fileName = `${serverName}.zip`;
-
-    console.log(`Uploading '${fileName}' to Supabase...`);
-
+    const fileBuffer = fs.readFileSync(req.file.path);
     const { data, error } = await supabase.storage
       .from("saves")
-      .upload(fileName, fileBuffer, { upsert: true });
+      .upload(`${serverName}.zip`, fileBuffer, { upsert: true });
+    fs.unlinkSync(req.file.path);
 
-    fs.unlinkSync(filePath); // Remove temp file
+    if (error) return res.status(500).send("Failed to upload to Supabase");
 
-    if (error) {
-      console.error("Supabase upload error:", error.message);
-      console.error("Error details:", JSON.stringify(error, null, 2));
-      return res.status(500).send("Failed to upload to Supabase");
-    }
-
-    console.log("Supabase upload successful:", data);
-
-    // Initialize player count if not exists
     if (!playerCounts[serverName]) playerCounts[serverName] = 0;
 
     res.json({ success: true, message: "Upload successful" });
   } catch (err) {
-    console.error("Upload exception:", err);
+    console.error(err);
     res.status(500).send("Upload failed due to server error");
+  }
+});
+
+// ===== CREATE NEW SAVE FROM TEMPLATE =====
+app.post("/create-save", async (req, res) => {
+  const { serverName } = req.body;
+
+  if (!serverName || !/^[A-Za-z0-9]+$/.test(serverName)) {
+    return res.status(400).json({ success: false, message: "Server name must only contain letters and numbers." });
+  }
+
+  try {
+    const templatePath = path.join(__dirname, "template_saves", "template.zip");
+    if (!fs.existsSync(templatePath)) return res.status(500).json({ success: false, message: "Template zip not found." });
+
+    const fileBuffer = fs.readFileSync(templatePath);
+    const { data, error } = await supabase.storage
+      .from("saves")
+      .upload(`${serverName}.zip`, fileBuffer, { upsert: true });
+
+    if (error) return res.status(500).json({ success: false, message: "Failed to upload new save." });
+
+    if (!playerCounts[serverName]) playerCounts[serverName] = 0;
+
+    res.json({ success: true, message: "New save created successfully." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error while creating save." });
   }
 });
 
 // ===== GET PLAYER COUNT =====
 app.get("/playercount/:serverName", (req, res) => {
-    const { serverName } = req.params;
-    if (!serverName) return res.status(400).json({ success: false, message: "Server name required" });
-
-    const count = playerCounts[serverName] || 0;
-    res.json({ success: true, serverName, count });
+  const { serverName } = req.params;
+  const count = playerCounts[serverName] || 0;
+  res.json({ success: true, serverName, count });
 });
 
 app.post("/plrcount/:serverName", (req, res) => {
-    const { serverName } = req.params;
-    const { count } = req.body;
+  const { serverName } = req.params;
+  const { count } = req.body;
 
-    if (!serverName || typeof count !== "number") {
-        return res.status(400).json({ success: false, message: "Invalid input" });
-    }
+  if (!serverName || typeof count !== "number") return res.status(400).json({ success: false, message: "Invalid input" });
 
-    playerCounts[serverName] = count;
-    res.json({ success: true });
+  playerCounts[serverName] = count;
+  res.json({ success: true });
 });
 
 // ===== DOWNLOAD (for mod) =====
@@ -96,180 +102,121 @@ app.get("/download/:serverName", async (req, res) => {
   const serverName = req.params.serverName;
 
   try {
-    const { data, error } = await supabase.storage
-      .from("saves")
-      .download(`${serverName}.zip`);
-
-    if (error || !data) {
-      console.error("Supabase download error:", error?.message || "File not found");
-      return res.status(404).send("Save not found");
-    }
+    const { data, error } = await supabase.storage.from("saves").download(`${serverName}.zip`);
+    if (error || !data) return res.status(404).send("Save not found");
 
     res.setHeader("Content-Disposition", `attachment; filename="${serverName}.zip"`);
     res.setHeader("Content-Type", "application/zip");
     data.pipe(res);
-
   } catch (err) {
     console.error(err);
     res.status(500).send("Download failed");
   }
 });
 
-const lobbyIDs = {};     // { serverName: lobbyID }
+const lobbyIDs = {};
 
 // ===== UPDATE LOBBY ID =====
 app.post("/lobbyid/:serverName", (req, res) => {
-    const { serverName } = req.params;
-    const { lobbyID } = req.body;
+  const { serverName } = req.params;
+  const { lobbyID } = req.body;
+  if (!serverName || !lobbyID) return res.status(400).json({ success: false });
 
-    if (!serverName || !lobbyID) return res.status(400).json({ success: false });
-
-    lobbyIDs[serverName] = lobbyID;
-    res.json({ success: true });
+  lobbyIDs[serverName] = lobbyID;
+  res.json({ success: true });
 });
 
-// ===== GET LOBBY ID ===== (optional, for mod use, not displayed on website)
+// ===== GET LOBBY ID =====
 app.get("/lobbyid/:serverName", (req, res) => {
-    const { serverName } = req.params;
-    if (!serverName) return res.status(400).json({ success: false });
-
-    const lobbyID = lobbyIDs[serverName] || null;
-    res.json({ success: true, serverName, lobbyID });
+  const { serverName } = req.params;
+  const lobbyID = lobbyIDs[serverName] || null;
+  res.json({ success: true, serverName, lobbyID });
 });
 
 // ===== WEBSITE =====
 app.get("/", async (req, res) => {
   try {
-    const { data, error } = await supabase.storage.from("saves").list("");
+    const { data: files, error } = await supabase.storage.from("saves").list("");
     if (error) throw error;
 
-    const servers = data
-      .filter(f => !f.name.endsWith(".emptyFolderPlaceholder"))
-      .map(f => f.name.replace(".zip", ""));
+    const servers = files.filter(f => !f.name.endsWith(".emptyFolderPlaceholder")).map(f => f.name.replace(".zip", ""));
 
-    const htmlList = servers
-      .map(name => {
-        const count = playerCounts[name] || 0;
-        const lobby = lobbyIDs[name] || "Not set";
-        return `
-          <p>
-            <b>${name}</b><br/>
-            Players: ${count}<br/>
-          </p>`;
-      })
-      .join("");
+    const htmlList = servers.map(name => {
+      const count = playerCounts[name] || 0;
+      return `<p><b>${name}</b><br/>Players: ${count}</p>`;
+    }).join("");
 
     res.send(`
 <html>
 <head>
   <title>Schedule Servers</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f2f2f2;
-      display: flex;
-      justify-content: center;
-      padding: 30px;
-    }
-
-    .container {
-      background-color: #fff;
-      padding: 30px 40px;
-      border-radius: 15px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      max-width: 400px;
-      width: 100%;
-    }
-
-    h1, h2 {
-      text-align: center;
-      color: #333;
-    }
-
-    form {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 20px;
-    }
-
-    input[type="text"], input[type="file"] {
-      padding: 10px;
-      margin-bottom: 15px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      font-size: 16px;
-    }
-
-    button {
-      padding: 12px;
-      border: none;
-      border-radius: 10px;
-      background-color: #4CAF50;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      margin-bottom: 10px;
-    }
-
-    button:hover {
-      background-color: #45a049;
-    }
-
-    .server-list {
-      max-height: 300px; /* scrollable container */
-      overflow-y: auto;
-      padding-right: 5px;
-    }
-
-    .server-list p {
-      background-color: #f9f9f9;
-      padding: 10px;
-      border-radius: 8px;
-      margin-bottom: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
+    body { font-family: Arial; background:#f2f2f2; display:flex; justify-content:center; padding:30px; }
+    .container { background:#fff; padding:30px 40px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1); max-width:400px; width:100%; }
+    h1,h2{text-align:center;color:#333;}
+    form { display:flex; flex-direction:column; margin-bottom:20px; }
+    input[type=text],input[type=file]{padding:10px;margin-bottom:15px;border-radius:8px;border:1px solid #ccc;font-size:16px;}
+    button{padding:12px;border:none;border-radius:10px;background:#4CAF50;color:white;font-size:16px;cursor:pointer;transition:0.2s;margin-bottom:10px;}
+    button:hover{background:#45a049;}
+    .server-list{max-height:300px; overflow-y:auto; padding-right:5px;}
+    .server-list p{background:#f9f9f9;padding:10px;border-radius:8px;margin-bottom:8px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Schedule Servers</h1>
-    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
-      <input type="text" name="serverName" placeholder="Server name" required />
-      <input type="file" id="saveFile" name="saveFile" accept=".zip" required />
-      <button type="submit" id="uploadBtn" style="display:none;">Upload Save</button>
+    <form id="saveForm">
+      <input type="text" id="serverNameInput" placeholder="Server name" required />
+      <input type="file" id="saveFile" name="saveFile" accept=".zip" />
+      <button type="button" id="uploadBtn">Upload Save</button>
+      <button type="button" id="createBtn">Create New Save</button>
     </form>
-
     <button id="refreshBtn">Refresh List</button>
-
     <h2>Servers</h2>
-    <div class="server-list" id="serverList">
-      ${htmlList || "<p>No servers uploaded yet.</p>"}
-    </div>
+    <div class="server-list" id="serverList">${htmlList || "<p>No servers uploaded yet.</p>"}</div>
   </div>
 
   <script>
+    const serverInput = document.getElementById('serverNameInput');
     const fileInput = document.getElementById('saveFile');
     const uploadBtn = document.getElementById('uploadBtn');
+    const createBtn = document.getElementById('createBtn');
     const refreshBtn = document.getElementById('refreshBtn');
     const serverList = document.getElementById('serverList');
 
-    fileInput.addEventListener('change', () => {
-      uploadBtn.style.display = fileInput.files.length > 0 ? 'inline-block' : 'none';
+    uploadBtn.addEventListener('click', async () => {
+      const serverName = serverInput.value.trim();
+      if (!serverName) return alert("Enter a server name.");
+      if (!fileInput.files.length) return alert("Select a zip file.");
+      const formData = new FormData();
+      formData.append("serverName", serverName);
+      formData.append("saveFile", fileInput.files[0]);
+      const res = await fetch('/upload', { method:'POST', body:formData });
+      const data = await res.json();
+      alert(data.message || "Done");
+      serverInput.value=""; fileInput.value=""; refreshBtn.click();
+    });
+
+    createBtn.addEventListener('click', async () => {
+      const serverName = serverInput.value.trim();
+      if (!serverName) return alert("Enter a server name.");
+      const res = await fetch('/create-save', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({serverName})
+      });
+      const data = await res.json();
+      alert(data.message || "Done");
+      serverInput.value=""; fileInput.value=""; refreshBtn.click();
     });
 
     refreshBtn.addEventListener('click', async () => {
-      try {
-        const res = await fetch('/');
-        const html = await res.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const newList = doc.getElementById('serverList');
-        if (newList) serverList.innerHTML = newList.innerHTML;
-      } catch (err) {
-        alert('Failed to refresh list.');
-        console.error(err);
-      }
+      const res = await fetch('/');
+      const html = await res.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html,'text/html');
+      const newList = doc.getElementById('serverList');
+      if(newList) serverList.innerHTML = newList.innerHTML;
     });
   </script>
 </body>
