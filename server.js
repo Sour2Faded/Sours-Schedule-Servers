@@ -106,6 +106,29 @@ app.get("/download/:serverName", async (req, res) => {
   }
 });
 
+const playerCounts = {}; // { serverName: count }
+const lobbyIDs = {};     // { serverName: lobbyID }
+
+// ===== UPDATE LOBBY ID =====
+app.post("/lobbyid/:serverName", (req, res) => {
+    const { serverName } = req.params;
+    const { lobbyID } = req.body;
+
+    if (!serverName || !lobbyID) return res.status(400).json({ success: false });
+
+    lobbyIDs[serverName] = lobbyID;
+    res.json({ success: true });
+});
+
+// ===== GET LOBBY ID ===== (optional, for mod use, not displayed on website)
+app.get("/lobbyid/:serverName", (req, res) => {
+    const { serverName } = req.params;
+    if (!serverName) return res.status(400).json({ success: false });
+
+    const lobbyID = lobbyIDs[serverName] || null;
+    res.json({ success: true, serverName, lobbyID });
+});
+
 // ===== WEBSITE =====
 app.get("/", async (req, res) => {
   try {
