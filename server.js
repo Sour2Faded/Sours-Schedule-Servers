@@ -27,9 +27,16 @@ app.use(express.json());
 // ===== UPLOAD (from web or mod) =====
 app.post("/upload", upload.single("saveFile"), async (req, res) => {
   const { serverName } = req.body;
-  if (!req.file || !serverName) {
-    console.error("Upload failed: Missing file or server name");
-    return res.status(400).send("Missing file or server name");
+
+  // ✅ Validate server name: only letters (A-Z, a-z) and numbers (0-9), no spaces or special characters
+  if (!serverName || !/^[A-Za-z0-9]+$/.test(serverName)) {
+    console.error("Upload failed: Invalid server name");
+    return res.status(400).send("Server name must only contain letters and numbers (no spaces or special characters).");
+  }
+
+  if (!req.file) {
+    console.error("Upload failed: Missing file");
+    return res.status(400).send("Missing file");
   }
 
   try {
@@ -61,16 +68,6 @@ app.post("/upload", upload.single("saveFile"), async (req, res) => {
     console.error("Upload exception:", err);
     res.status(500).send("Upload failed due to server error");
   }
-});
-// ===== UPDATE PLAYER COUNT =====
-app.post("/plrcount/:serverName", (req, res) => {
-  const { serverName } = req.params;
-  const { count } = req.body;
-
-  if (!serverName || typeof count !== "number") return res.status(400).json({ success: false });
-
-  playerCounts[serverName] = count;
-  res.json({ success: true });
 });
 
 // ===== GET PLAYER COUNT =====
