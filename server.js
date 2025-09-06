@@ -106,7 +106,6 @@ app.get("/download/:serverName", async (req, res) => {
   }
 });
 
-const playerCounts = {}; // { serverName: count }
 const lobbyIDs = {};     // { serverName: lobbyID }
 
 // ===== UPDATE LOBBY ID =====
