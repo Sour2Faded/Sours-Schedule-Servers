@@ -152,7 +152,7 @@ app.get("/", async (req, res) => {
   <title>Schedule Servers</title>
   <style>
     body { font-family: Arial; background:#f2f2f2; display:flex; justify-content:center; padding:30px; }
-    .container { background:#fff; padding:30px 40px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1); max-width:400px; width:100%; }
+    .container { background:#fff; padding:30px 40px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1); max-width:400px; width:100%; height:800; }
     h1,h2{text-align:center;color:#333;}
     form { display:flex; flex-direction:column; margin-bottom:20px; }
     input[type=text],input[type=file]{padding:10px;margin-bottom:15px;border-radius:8px;border:1px solid #ccc;font-size:16px;}
