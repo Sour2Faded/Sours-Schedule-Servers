@@ -6,7 +6,7 @@ const { createClient } = require("@supabase/supabase-js");
 
 // Supabase setup
 const SUPABASE_URL = "https://dyifvnvtegtuchrkqsqp.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5aWZ2bnZ0ZWd0dWNocmtxc3FwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Njk0ODY0MiwiZXhwIjoyMDcyNTI0NjQyfQ.YYc9iyinArjf1eiH3zD1jiUZ0THCfMPepnPkDKE3xTs"; // use a Service Role key
+const SUPABASE_KEY = process.env.SUPABASE_KEY; // use a Service Role key
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Express setup
