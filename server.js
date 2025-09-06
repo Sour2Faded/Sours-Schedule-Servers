@@ -144,99 +144,120 @@ app.get("/", async (req, res) => {
 
     // ✅ Make sure the template literal is closed properly here
     res.send(`
-  <html>
-  <head>
-    <title>Schedule Servers</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        background-color: #f2f2f2;
-        display: flex;
-        justify-content: center;
-        padding: 30px;
-      }
+<html>
+<head>
+  <title>Schedule Servers</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+      display: flex;
+      justify-content: center;
+      padding: 30px;
+    }
 
-      .container {
-        background-color: #fff;
-        padding: 30px 40px;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        max-width: 400px;
-        width: 100%;
-      }
+    .container {
+      background-color: #fff;
+      padding: 30px 40px;
+      border-radius: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+    }
 
-      h1, h2 {
-        text-align: center;
-        color: #333;
-      }
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
 
-      form {
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 20px;
-      }
+    form {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 20px;
+    }
 
-      input[type="text"], input[type="file"] {
-        padding: 10px;
-        margin-bottom: 15px;
-        border-radius: 8px;
-        border: 1px solid #ccc;
-        font-size: 16px;
-      }
+    input[type="text"], input[type="file"] {
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
 
-      button {
-        padding: 12px;
-        border: none;
-        border-radius: 10px;
-        background-color: #4CAF50;
-        color: white;
-        font-size: 16px;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      }
+    button {
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background-color: #4CAF50;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-bottom: 10px;
+    }
 
-      button:hover {
-        background-color: #45a049;
-      }
+    button:hover {
+      background-color: #45a049;
+    }
 
-      .server-list p {
-        background-color: #f9f9f9;
-        padding: 10px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Schedule Servers</h1>
-      <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
-        <input type="text" name="serverName" placeholder="Server name" required />
-        <input type="file" id="saveFile" name="saveFile" accept=".zip" required />
-        <button type="submit" id="uploadBtn" style="display:none;">Upload Save</button>
-      </form>
+    .server-list {
+      max-height: 300px; /* scrollable container */
+      overflow-y: auto;
+      padding-right: 5px;
+    }
 
-      <h2>Servers</h2>
-      <div class="server-list">
-        ${htmlList || "<p>No servers uploaded yet.</p>"}
-      </div>
+    .server-list p {
+      background-color: #f9f9f9;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Schedule Servers</h1>
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+      <input type="text" name="serverName" placeholder="Server name" required />
+      <input type="file" id="saveFile" name="saveFile" accept=".zip" required />
+      <button type="submit" id="uploadBtn" style="display:none;">Upload Save</button>
+    </form>
+
+    <button id="refreshBtn">Refresh List</button>
+
+    <h2>Servers</h2>
+    <div class="server-list" id="serverList">
+      ${htmlList || "<p>No servers uploaded yet.</p>"}
     </div>
+  </div>
 
-    <script>
-      const fileInput = document.getElementById('saveFile');
-      const uploadBtn = document.getElementById('uploadBtn');
+  <script>
+    const fileInput = document.getElementById('saveFile');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const serverList = document.getElementById('serverList');
 
-      fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) {
-          uploadBtn.style.display = 'inline-block';
-        } else {
-          uploadBtn.style.display = 'none';
-        }
-      });
-    </script>
-  </body>
-  </html>
+    fileInput.addEventListener('change', () => {
+      uploadBtn.style.display = fileInput.files.length > 0 ? 'inline-block' : 'none';
+    });
+
+    refreshBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/');
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const newList = doc.getElementById('serverList');
+        if (newList) serverList.innerHTML = newList.innerHTML;
+      } catch (err) {
+        alert('Failed to refresh list.');
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
 `);
   } catch (err) {
     console.error(err);
