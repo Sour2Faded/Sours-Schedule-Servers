@@ -148,10 +148,18 @@ app.get("/", async (req, res) => {
       .map(f => f.name.replace(".zip", ""));
 
     const htmlList = servers
-      .map(name => `<p><b>${name}</b> - Players: ${playerCounts[name] || 0}</p>`)
+      .map(name => {
+        const count = playerCounts[name] || 0;
+        const lobby = lobbyIDs[name] || "Not set";
+        return `
+          <p>
+            <b>${name}</b><br/>
+            Players: ${count}<br/>
+            Lobby ID: ${lobby}
+          </p>`;
+      })
       .join("");
 
-    // ✅ Make sure the template literal is closed properly here
     res.send(`
 <html>
 <head>
