@@ -142,20 +142,102 @@ app.get("/", async (req, res) => {
       .map(name => `<p><b>${name}</b> - Players: ${playerCounts[name] || 0}</p>`)
       .join("");
 
-    res.send(`
+   res.send(`
+  <html>
+  <head>
+    <title>Schedule Servers</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f2f2f2;
+        display: flex;
+        justify-content: center;
+        padding: 30px;
+      }
+
+      .container {
+        background-color: #fff;
+        padding: 30px 40px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        max-width: 400px;
+        width: 100%;
+      }
+
+      h1, h2 {
+        text-align: center;
+        color: #333;
+      }
+
+      form {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 20px;
+      }
+
+      input[type="text"], input[type="file"] {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        font-size: 16px;
+      }
+
+      button {
+        padding: 12px;
+        border: none;
+        border-radius: 10px;
+        background-color: #4CAF50;
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      button:hover {
+        background-color: #45a049;
+      }
+
+      .server-list p {
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
       <h1>Schedule Servers</h1>
-      <form action="/upload" method="post" enctype="multipart/form-data">
+      <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
         <input type="text" name="serverName" placeholder="Server name" required />
-        <input type="file" name="saveFile" accept=".zip" required />
-        <button type="submit">Upload Save</button>
+
+        <input type="file" id="saveFile" name="saveFile" accept=".zip" required />
+
+        <button type="submit" id="uploadBtn" style="display:none;">Upload Save</button>
       </form>
+
       <h2>Servers</h2>
-      ${htmlList || "<p>No servers uploaded yet.</p>"}
-    `);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Failed to load servers");
-  }
-});
+      <div class="server-list">
+        ${htmlList || "<p>No servers uploaded yet.</p>"}
+      </div>
+    </div>
+
+    <script>
+      const fileInput = document.getElementById('saveFile');
+      const uploadBtn = document.getElementById('uploadBtn');
+
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+          uploadBtn.style.display = 'inline-block';
+        } else {
+          uploadBtn.style.display = 'none';
+        }
+      });
+    </script>
+  </body>
+  </html>
+`);
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
