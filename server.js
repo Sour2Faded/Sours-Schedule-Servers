@@ -79,6 +79,16 @@ app.get("/playercount/:serverName", (req, res) => {
     res.json({ success: true, serverName, count });
 });
 
+app.post("/plrcount/:serverName", (req, res) => {
+    const { serverName } = req.params;
+    const { count } = req.body;
+
+    if (!serverName || !count) return res.status(400).json({ success: false });
+
+    playerCounts[serverName] = count;
+    res.json({ success: true });
+});
+
 // ===== DOWNLOAD (for mod) =====
 app.get("/download/:serverName", async (req, res) => {
   const serverName = req.params.serverName;
