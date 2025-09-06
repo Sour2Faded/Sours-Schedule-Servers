@@ -155,7 +155,6 @@ app.get("/", async (req, res) => {
           <p>
             <b>${name}</b><br/>
             Players: ${count}<br/>
-            Lobby ID: ${lobby}
           </p>`;
       })
       .join("");
