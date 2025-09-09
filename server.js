@@ -26,7 +26,7 @@ app.use(express.json());
 
 // ===== UPLOAD (from web or mod) =====
 app.post("/upload", upload.single("saveFile"), async (req, res) => {
-  const { serverName } = req.body;
+  const { serverName, source } = req.body; // source = "web" or "mod"
 
   if (!serverName || !/^[A-Za-z0-9]+$/.test(serverName)) {
     return res.status(400).send("Server name must only contain letters and numbers.");
@@ -35,10 +35,24 @@ app.post("/upload", upload.single("saveFile"), async (req, res) => {
   if (!req.file) return res.status(400).send("Missing file");
 
   try {
+    // Only block duplicate if upload is from website
+    if (source === "web") {
+      const { data: existingFiles, error: listError } = await supabase.storage
+        .from("saves")
+        .list("", { search: `${serverName}.zip` });
+
+      if (listError) throw listError;
+
+      if (existingFiles.length > 0) {
+        fs.unlinkSync(req.file.path); // clean up temp file
+        return res.status(400).json({ success: false, message: "A save with this name already exists." });
+      }
+    }
+
     const fileBuffer = fs.readFileSync(req.file.path);
     const { data, error } = await supabase.storage
       .from("saves")
-      .upload(`${serverName}.zip`, fileBuffer, { upsert: true });
+      .upload(`${serverName}.zip`, fileBuffer, { upsert: source !== "web" }); // website: no overwrite, mod: allow
     fs.unlinkSync(req.file.path);
 
     if (error) return res.status(500).send("Failed to upload to Supabase");
@@ -188,13 +202,18 @@ app.get("/", async (req, res) => {
       const serverName = serverInput.value.trim();
       if (!serverName) return alert("Enter a server name.");
       if (!fileInput.files.length) return alert("Select a zip file.");
+
       const formData = new FormData();
       formData.append("serverName", serverName);
       formData.append("saveFile", fileInput.files[0]);
+      formData.append("source", "web"); // <-- mark as website upload
+
       const res = await fetch('/upload', { method:'POST', body:formData });
       const data = await res.json();
       alert(data.message || "Done");
-      serverInput.value=""; fileInput.value=""; refreshBtn.click();
+      serverInput.value=""; 
+      fileInput.value=""; 
+      refreshBtn.click();
     });
 
     createBtn.addEventListener('click', async () => {
