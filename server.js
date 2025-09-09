@@ -75,13 +75,24 @@ app.post("/create-save", async (req, res) => {
   }
 
   try {
+    // Check if a save with this name already exists
+    const { data: existingFiles, error: listError } = await supabase.storage
+      .from("saves")
+      .list("", { search: `${serverName}.zip` });
+
+    if (listError) throw listError;
+
+    if (existingFiles.length > 0) {
+      return res.status(400).json({ success: false, message: "A save with this name already exists." });
+    }
+
     const templatePath = path.join(__dirname, "template_saves", "template.zip");
     if (!fs.existsSync(templatePath)) return res.status(500).json({ success: false, message: "Template zip not found." });
 
     const fileBuffer = fs.readFileSync(templatePath);
     const { data, error } = await supabase.storage
       .from("saves")
-      .upload(`${serverName}.zip`, fileBuffer, { upsert: true });
+      .upload(`${serverName}.zip`, fileBuffer, { upsert: false }); // no overwrite
 
     if (error) return res.status(500).json({ success: false, message: "Failed to upload new save." });
 
